@@ -216,7 +216,8 @@ static ssize_t otp_show(struct device *dev, struct device_attribute *attr, char 
     int ret;
 
     sha204_sysdata = (atsha204a_sysdata_t *)dev_get_drvdata(dev);
-    atsha204a_read_otp(sha204_sysdata->client, otp);
+    if (0 > atsha204a_read_otp(sha204_sysdata->client, otp))
+        return -EIO;
 
     otp[SHA204_OTP_SIZE] = '\0';
     if ((' ' <= otp[0]) && ('~' >= otp[0]))
