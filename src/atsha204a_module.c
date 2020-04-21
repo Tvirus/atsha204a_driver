@@ -442,7 +442,8 @@ static const struct of_device_id atsha204a_match_table[] = {
     { /* end */ },
 };
 static const struct i2c_device_id atsha204a_id[] = {
-    { }
+    { "atsha204a", 0 },
+    { /* end */ }
 };
 static struct i2c_driver atsha204a_driver =
 {
