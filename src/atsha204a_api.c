@@ -767,8 +767,8 @@ int atsha204a_mac(const struct i2c_client *i2c, u8 mode, u8 slot, const u8 *chal
     /* 仅唤醒，恢复上一步nonce中的TempKey等相关值 */
     atsha204a_wakeup(i2c);
 
-    param2[0] = 0;
-    param2[1] = slot;
+    param2[0] = slot;
+    param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_MAC, mode, param2, challenge, len);
     msleep(CMD_MAX_TIME_MAC);
     if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
