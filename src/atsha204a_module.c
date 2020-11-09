@@ -79,7 +79,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
 
     switch (cmd)
     {
-        case ATSHA204A_CMD_SN:
+        case ATSHA204A_CMD_READ_SN:
         {
             if (0 > atsha204a_read_sn(sha204_sysdata->client, (u8 *)(&sn)))
                 return -1;
@@ -87,7 +87,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
                 return -1;
             return 0;
         }
-        case ATSHA204A_CMD_OTP:
+        case ATSHA204A_CMD_READ_OTP:
         {
             if (0 > atsha204a_read_otp(sha204_sysdata->client, (u8 *)(&otp)))
                 return -1;
