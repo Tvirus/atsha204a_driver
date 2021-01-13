@@ -246,13 +246,7 @@ int atsha204a_check_block_crc(const u8 *response, u32 len)
 
 
 
-/* i2c速度配置为100k时可以发送一个0字节来唤醒 */
-void atsha204a_wakeup(const struct i2c_client *i2c)
-{
-    u8 v = 0;
-    atsha204a_i2c_write(i2c, &v, 1);
-    msleep(2);
-}
+
 void atsha204a_reset(const struct i2c_client *i2c)
 {
     u8 v = SHA204_PACKET_FUNC_RESET;
