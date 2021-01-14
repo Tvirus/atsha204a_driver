@@ -20,7 +20,7 @@ void atsha204a_wakeup(const struct i2c_client *i2c)
     msg.len   = 0;
     i2c_transfer(i2c->adapter, &msg, 1);
 
-    msleep(4);
+    mdelay(3);
 }
 
 int atsha204a_i2c_write(const struct i2c_client *i2c, const u8 *buf, u8 len)
