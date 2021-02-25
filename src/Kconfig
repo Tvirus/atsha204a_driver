@@ -1,0 +1,8 @@
+
+config ATSHA204A
+	tristate "Support for Atmel atsha204a authentication devices."
+	depends on I2C
+	help
+	  This option enables the driver for atsha204a hardware authentication devices
+
+	  To compile this driver as a module, choose M here.
