@@ -1,5 +1,5 @@
-#ifndef __ATSHA204A_IOCTL_CODE_H__
-#define __ATSHA204A_IOCTL_CODE_H__
+#ifndef __ATSHA204A_IOCTL_H__
+#define __ATSHA204A_IOCTL_H__
 
 
 #include "atsha204a_api.h"
