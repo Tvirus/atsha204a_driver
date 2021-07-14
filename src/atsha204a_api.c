@@ -246,13 +246,7 @@ int atsha204a_check_block_crc(const u8 *response, u32 len)
 
 
 
-/* i2c速度配置为100k时可以发送一个0字节来唤醒 */
-void atsha204a_wakeup(const struct i2c_client *i2c)
-{
-    u8 v = 0;
-    atsha204a_i2c_write(i2c, &v, 1);
-    msleep(2);
-}
+
 void atsha204a_reset(const struct i2c_client *i2c)
 {
     u8 v = SHA204_PACKET_FUNC_RESET;
@@ -798,8 +792,8 @@ int atsha204a_gendig(const struct i2c_client *i2c, u8 zone, u16 slot, const u8 *
     /* 仅唤醒，恢复上一步nonce中的TempKey等相关值 */
     atsha204a_wakeup(i2c);
 
-    param2[0] = (slot & 0xff00) >> 8;
-    param2[1] =  slot & 0xff;
+    param2[0] =  slot & 0xff;
+    param2[1] = (slot & 0xff00) >> 8;
     atsha204a_send_command(i2c, SHA204_GENDIG, zone, param2, data, len);
     msleep(CMD_MAX_TIME_GENDIG);
     if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))

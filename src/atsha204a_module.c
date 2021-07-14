@@ -4,7 +4,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include "atsha204a_api.h"
-#include "atsha204a_ioctl_code.h"
+#include "atsha204a_ioctl.h"
 
 
 
@@ -79,7 +79,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
 
     switch (cmd)
     {
-        case ATSHA204A_CMD_SN:
+        case ATSHA204A_CMD_READ_SN:
         {
             if (0 > atsha204a_read_sn(sha204_sysdata->client, (u8 *)(&sn)))
                 return -1;
@@ -87,7 +87,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
                 return -1;
             return 0;
         }
-        case ATSHA204A_CMD_OTP:
+        case ATSHA204A_CMD_READ_OTP:
         {
             if (0 > atsha204a_read_otp(sha204_sysdata->client, (u8 *)(&otp)))
                 return -1;
@@ -345,7 +345,7 @@ static int atsha204a_probe(struct i2c_client *client, const struct i2c_device_id
     sha204_sysdata = kzalloc(sizeof(atsha204a_sysdata_t), GFP_KERNEL);
     if (IS_ERR_OR_NULL(sha204_sysdata))
     {
-        ERROR("cannot allocate memory, size: %u !", sizeof(atsha204a_sysdata_t));
+        ERROR("cannot allocate memory, size: %lu !", sizeof(atsha204a_sysdata_t));
         return -ENOMEM;
     }
     sha204_sysdata->client = client;

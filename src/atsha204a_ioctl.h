@@ -1,5 +1,5 @@
-#ifndef __ATSHA204A_IOCTL_CODE_H__
-#define __ATSHA204A_IOCTL_CODE_H__
+#ifndef __ATSHA204A_IOCTL_H__
+#define __ATSHA204A_IOCTL_H__
 
 
 #include "atsha204a_api.h"
@@ -7,8 +7,8 @@
 
 
 
-#define ATSHA204A_CMD_SN                   (0x10)       //读sn
-#define ATSHA204A_CMD_OTP                  (0x11)       //读otp
+#define ATSHA204A_CMD_READ_SN              (0x10)       //读sn
+#define ATSHA204A_CMD_READ_OTP             (0x11)       //读otp
 #define ATSHA204A_CMD_NONCE                (0x12)       //nonce命令
 #define ATSHA204A_CMD_MAC                  (0x13)       //mac命令
 
