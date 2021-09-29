@@ -3,19 +3,18 @@
 #include <linux/cdev.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include "atsha204a_api.h"
 #include "atsha204a_ioctl.h"
+#include "atsha204a_api.h"
 
 
 
-#define VERSION "1.0"
+#define VERSION "2.0"
 
 
 
-#if 1
-#define DEBUG(fmt, arg...)  printk("--atsha204a-- " fmt "\n", ##arg);
-#endif
-#define ERROR(fmt, arg...)  printk(KERN_ERR "--atsha204a-- " fmt "\n", ##arg)
+
+#define DEBUG(fmt, arg...)  printk(KERN_NOTICE "--atsha204a-- " fmt "\n", ##arg);
+#define ERROR(fmt, arg...)  printk(KERN_ERR    "--atsha204a-- " fmt "\n", ##arg)
 
 
 
@@ -75,6 +74,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
     atsha204a_cmd_burn_config_t config;
     atsha204a_cmd_write_key_t   key;
     atsha204a_cmd_gendig_t      gendig;
+    atsha204a_cmd_verify_key_t  verify_key;
 
 
     switch (cmd)
@@ -99,7 +99,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
         {
             if (0 != copy_from_user(&nonce, (u8 *)data, sizeof(nonce)))
                 return -1;
-            if (0 > atsha204a_nonce(sha204_sysdata->client, nonce.in_mode, nonce.in_numin, nonce.out_response))
+            if (0 > atsha204a_nonce(sha204_sysdata->client, nonce.in_mode, nonce.in_numin, nonce.out_randout))
                 return -1;
             if (0 != copy_to_user((u8 *)data, &nonce, sizeof(nonce)))
                 return -1;
@@ -110,7 +110,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
             if (0 != copy_from_user(&mac, (u8 *)data, sizeof(mac)))
                 return -1;
             if (0 > atsha204a_mac(sha204_sysdata->client, mac.in_mode, mac.in_slot,
-                                  mac.in_challenge, mac.in_challenge_len, mac.out_response))
+                                  mac.in_challenge, mac.in_challenge_len, mac.out_digest))
                 return -1;
             if (0 != copy_to_user((u8 *)data, &mac, sizeof(mac)))
                 return -1;
@@ -171,6 +171,21 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
             if (0 > atsha204a_write_encrypted_key(sha204_sysdata->client, key.key, key.slot, key.digest))
                 return -1;
             return 0;
+        }
+        case ATSHA204A_CMD_VERIFY_KEY:
+        {
+            if (0 != copy_from_user(&verify_key, (u8 *)data, sizeof(verify_key)))
+                return -1;
+            if (0 == atsha204a_verify_key(sha204_sysdata->client, verify_key.key, verify_key.slot))
+            {
+                DEBUG("Key(%u) verify OK", verify_key.slot);
+                return 0;
+            }
+            else
+            {
+                DEBUG("Key(%u) verify failed", verify_key.slot);
+                return -1;
+            }
         }
         default:
             return -1;

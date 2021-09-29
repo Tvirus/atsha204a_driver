@@ -1,112 +1,15 @@
 #include "atsha204a_api.h"
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/random.h>
 
+#include "atsha204a_i2c.h"
+#include "sha204_helper.h"
 
 
 
 
 #define ERROR(fmt, arg...)  printk(KERN_ERR "--atsha204a-- " fmt "\n", ##arg)
-
-
-/* opcodes for ATSHA204 Commands */
-#define SHA204_CHECKMAC                 ((uint8_t) 0x28)       //!< CheckMac command op-code
-#define SHA204_DERIVE_KEY               ((uint8_t) 0x1C)       //!< DeriveKey command op-code
-#define SHA204_DEVREV                   ((uint8_t) 0x30)       //!< DevRev command op-code
-#define SHA204_GENDIG                   ((uint8_t) 0x15)       //!< GenDig command op-code
-#define SHA204_HMAC                     ((uint8_t) 0x11)       //!< HMAC command op-code
-#define SHA204_LOCK                     ((uint8_t) 0x17)       //!< Lock command op-code
-#define SHA204_MAC                      ((uint8_t) 0x08)       //!< MAC command op-code
-#define SHA204_NONCE                    ((uint8_t) 0x16)       //!< Nonce command op-code
-#define SHA204_PAUSE                    ((uint8_t) 0x01)       //!< Pause command op-code
-#define SHA204_RANDOM                   ((uint8_t) 0x1B)       //!< Random command op-code
-#define SHA204_READ                     ((uint8_t) 0x02)       //!< Read command op-code
-#define SHA204_UPDATE_EXTRA             ((uint8_t) 0x20)       //!< UpdateExtra command op-code
-#define SHA204_WRITE                    ((uint8_t) 0x12)       //!< Write command op-code
-
-/* Definitions for Zone and Address Parameters */
-#define SHA204_ZONE_CONFIG              ((uint8_t) 0x00)       //!< Configuration zone
-#define SHA204_ZONE_OTP                 ((uint8_t) 0x01)       //!< OTP (One Time Programming) zone
-#define SHA204_ZONE_DATA                ((uint8_t) 0x02)       //!< Data zone
-#define SHA204_ZONE_MASK                ((uint8_t) 0x03)       //!< Zone mask
-#define SHA204_ZONE_COUNT_FLAG          ((uint8_t) 0x80)       //!< Zone bit 7 set: Access 32 bytes, otherwise 4 bytes.
-#define SHA204_ZONE_ACCESS_4            ((uint8_t)    4)       //!< Read or write 4 bytes.
-#define SHA204_ZONE_ACCESS_32           ((uint8_t)   32)       //!< Read or write 32 bytes.
-
-/* Word Address Values */
-#define SHA204_PACKET_FUNC_RESET        ((uint8_t) 0x00)
-#define SHA204_PACKET_FUNC_SLEEP        ((uint8_t) 0x01)
-#define SHA204_PACKET_FUNC_IDLE         ((uint8_t) 0x02)
-#define SHA204_PACKET_FUNC_CMD          ((uint8_t) 0x03)
-
-/* Definitions for the Lock Command */
-#define LOCK_ZONE_IDX                   SHA204_PARAM1_IDX      //!< Lock command index for zone
-#define LOCK_SUMMARY_IDX                SHA204_PARAM2_IDX      //!< Lock command index for summary
-#define LOCK_COUNT                      SHA204_CMD_SIZE_MIN    //!< Lock command packet size
-#define LOCK_ZONE_NO_CONFIG             ((uint8_t) 0x01)       //!< Lock zone is OTP or Data
-#define LOCK_ZONE_NO_CRC                ((uint8_t) 0x80)       //!< Lock command: Ignore summary.
-#define LOCK_ZONE_MASK                  (0x81)                 //!< Lock parameter 1 bits 2 to 6 are 0.
-
-/*name Definitions for the Nonce Command */
-#define NONCE_MODE_IDX                  SHA204_PARAM1_IDX      //!< Nonce command index for mode
-#define NONCE_PARAM2_IDX                SHA204_PARAM2_IDX      //!< Nonce command index for 2. parameter
-#define NONCE_INPUT_IDX                 SHA204_DATA_IDX        //!< Nonce command index for input data
-#define NONCE_COUNT_SHORT               (27)                   //!< Nonce command packet size for 20 bytes of data
-#define NONCE_COUNT_LONG                (39)                   //!< Nonce command packet size for 32 bytes of data
-#define NONCE_MODE_MASK                 ((uint8_t) 3)          //!< Nonce mode bits 2 to 7 are 0.
-#define NONCE_MODE_SEED_UPDATE          ((uint8_t) 0x00)       //!< Nonce mode: update seed
-#define NONCE_MODE_NO_SEED_UPDATE       ((uint8_t) 0x01)       //!< Nonce mode: do not update seed
-#define NONCE_MODE_INVALID              ((uint8_t) 0x02)       //!< Nonce mode 2 is invalid.
-#define NONCE_MODE_PASSTHROUGH          ((uint8_t) 0x03)       //!< Nonce mode: pass-through
-
-/* Definitions for the MAC Command */
-#define MAC_MODE_IDX                    SHA204_PARAM1_IDX      //!< MAC command index for mode
-#define MAC_KEYID_IDX                   SHA204_PARAM2_IDX      //!< MAC command index for key id
-#define MAC_CHALLENGE_IDX               SHA204_DATA_IDX        //!< MAC command index for optional challenge
-#define MAC_COUNT_SHORT                 SHA204_CMD_SIZE_MIN    //!< MAC command packet size without challenge
-#define MAC_COUNT_LONG                  (39)                   //!< MAC command packet size with challenge
-#define MAC_MODE_CHALLENGE              ((uint8_t) 0x00)       //!< MAC mode       0: first SHA block from data slot
-#define MAC_MODE_BLOCK2_TEMPKEY         ((uint8_t) 0x01)       //!< MAC mode bit   0: second SHA block from TempKey
-#define MAC_MODE_BLOCK1_TEMPKEY         ((uint8_t) 0x02)       //!< MAC mode bit   1: first SHA block from TempKey
-#define MAC_MODE_SOURCE_FLAG_MATCH      ((uint8_t) 0x04)       //!< MAC mode bit   2: match TempKey.SourceFlag
-#define MAC_MODE_PASSTHROUGH            ((uint8_t) 0x07)       //!< MAC mode bit 0-2: pass-through mode
-#define MAC_MODE_INCLUDE_OTP_88         ((uint8_t) 0x10)       //!< MAC mode bit   4: include first 88 OTP bits
-#define MAC_MODE_INCLUDE_OTP_64         ((uint8_t) 0x20)       //!< MAC mode bit   5: include first 64 OTP bits
-#define MAC_MODE_INCLUDE_SN             ((uint8_t) 0x40)       //!< MAC mode bit   6: include serial number
-#define MAC_MODE_MASK                   ((uint8_t) 0x77)       //!< MAC mode bits 3 and 7 are 0.
-
-/* Definitions for the GenDig Command */
-#define GENDIG_ZONE_IDX                 SHA204_PARAM1_IDX      //!< GenDig command index for zone
-#define GENDIG_KEYID_IDX                SHA204_PARAM2_IDX      //!< GenDig command index for key id
-#define GENDIG_DATA_IDX                 SHA204_DATA_IDX        //!< GenDig command index for optional data
-#define GENDIG_COUNT                    SHA204_CMD_SIZE_MIN    //!< GenDig command packet size without "other data"
-#define GENDIG_COUNT_DATA               (11)                   //!< GenDig command packet size with "other data"
-#define GENDIG_OTHER_DATA_SIZE          (4)                    //!< GenDig size of "other data"
-#define GENDIG_ZONE_CONFIG              ((uint8_t) 0)          //!< GenDig zone id config
-#define GENDIG_ZONE_OTP                 ((uint8_t) 1)          //!< GenDig zone id OTP
-#define GENDIG_ZONE_DATA                ((uint8_t) 2)          //!< GenDig zone id data
-
-
-
-
-/* 各个命令的最大执行时间(ms) */
-#define CMD_MAX_TIME_DERIVE_KEY         (62)
-#define CMD_MAX_TIME_DEVREV             (2)
-#define CMD_MAX_TIME_GENDIG             (43)
-#define CMD_MAX_TIME_HMAC               (69)
-#define CMD_MAX_TIME_CHECKMAC           (38)
-#define CMD_MAX_TIME_LOCK               (24)
-#define CMD_MAX_TIME_MAC                (35)
-#define CMD_MAX_TIME_NONCE              (60)
-#define CMD_MAX_TIME_PAUSE              (2)
-#define CMD_MAX_TIME_RANDOM             (50)
-#define CMD_MAX_TIME_READ               (4)
-#define CMD_MAX_TIME_SHA                (22)
-#define CMD_MAX_TIME_UPDATE_EXTRA       (12)
-#define CMD_MAX_TIME_WRITE              (42)
-
-
-
 
 
 typedef struct
@@ -150,7 +53,7 @@ u8 defconfig[SHA204_WRITABLE_CONFIG_SIZE] =
 
 
 /* 返回成功写入的长度，包括最后的'\0' */
-int hex_dump_str(char *str, int str_len, u8 *buf, int buf_len, u8 col)
+int hex_dump_str(char *str, int str_len, const u8 *buf, int buf_len, u8 col)
 {
     u32 i;
     int ret;
@@ -220,12 +123,13 @@ void atsha204a_crc(size_t length, const u8 *data, u8 *crc_le)
  * \param[in] packet Packet to calculate CRC data for
  */
 /* block结构：count(1),data(n),CRC(2) */
-int atsha204a_calc_block_crc(u8 *block)
+static int atsha204a_calc_block_crc(u8 *block)
 {
-    if (4 > block[0])
+    if (4 > block[SHA204_BUFFER_POS_COUNT])
         return -1;
 
-    atsha204a_crc(block[0] - 2, block, block + block[0] - 2);
+    atsha204a_crc(block[SHA204_BUFFER_POS_COUNT] - SHA204_CRC_SIZE, block,
+                    block + block[SHA204_BUFFER_POS_COUNT] - SHA204_CRC_SIZE);
     return 0;
 }
 /** \brief This function checks the consistency of a response.
@@ -234,14 +138,17 @@ int atsha204a_calc_block_crc(u8 *block)
  */
 int atsha204a_check_block_crc(const u8 *response, u32 len)
 {
-    u8 crc[2];
+    u8 crc[SHA204_CRC_SIZE];
 
-    if (len != response[0] || 4 > len)
+    if ((len != response[SHA204_BUFFER_POS_COUNT]) || (SHA204_RSP_SIZE_MIN > len))
         return -1;
 
-    atsha204a_crc(len - 2, response, crc);
+    atsha204a_crc(len - SHA204_CRC_SIZE, response, crc);
 
-    return (crc[0] == response[len - 2] && crc[1] == response[len - 1]) ? 0 : -1;
+    if (memcmp(crc, &response[len - SHA204_CRC_SIZE], SHA204_CRC_SIZE))
+        return -1;
+    else
+        return 0;
 }
 
 
@@ -268,24 +175,24 @@ void atsha204a_set_idle(const struct i2c_client *i2c)
     atsha204a_i2c_write(i2c, &v, 1);
 }
 
-static int atsha204a_send_command(const struct i2c_client *i2c, u8 opcode, u8 param1, const u8 *param2, const u8 *data, u8 len)
+static int atsha204a_send_command(const struct i2c_client *i2c, u8 opcode, u8 param1, const u8 *param2, const u8 *data, u8 data_len)
 {
     u8 buf[100];
     atsha204a_cmd_t *cmd = (atsha204a_cmd_t *)buf;
 
 
-    if (sizeof(buf) < (sizeof(atsha204a_cmd_t) + len + 2))
+    if (sizeof(buf) < (sizeof(atsha204a_cmd_t) + data_len + SHA204_CRC_SIZE))
         return -1;
 
     cmd->addr      = SHA204_PACKET_FUNC_CMD;
-    cmd->count     = sizeof(atsha204a_cmd_t) + len + 1;
+    cmd->count     = sizeof(atsha204a_cmd_t) + data_len + SHA204_CRC_SIZE - 1;
     cmd->opcode    = opcode;
     cmd->param1    = param1;
     cmd->param2[0] = param2[0];
     cmd->param2[1] = param2[1];
-    memcpy(cmd->data, data, len);
+    memcpy(cmd->data, data, data_len);
     atsha204a_calc_block_crc(((u8 *)cmd) + 1);
-    if (0 > atsha204a_i2c_write(i2c, (u8 *)cmd, sizeof(atsha204a_cmd_t) + len + 2))
+    if (0 > atsha204a_i2c_write(i2c, (u8 *)cmd, sizeof(atsha204a_cmd_t) + data_len + SHA204_CRC_SIZE))
         return -1;
 
     return 0;
@@ -307,7 +214,7 @@ int atsha204a_pause(const struct i2c_client *i2c, u8 selector)
 
     param2[0] = param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_PAUSE, selector, param2, NULL, 0);
-    msleep(CMD_MAX_TIME_PAUSE);
+    msleep(PAUSE_EXEC_MAX);
 
     return 0;
 }
@@ -315,15 +222,16 @@ int atsha204a_pause(const struct i2c_client *i2c, u8 selector)
 int atsha204a_read_sn(const struct i2c_client *i2c, u8 *sn)
 {
     u8 param2[2];
-    u8 res[SHA204_ZONE_ACCESS_32 + 3] = {0}; /* 32字节读，加上count和CRC共35字节 */
+    u8 res[READ_32_RSP_SIZE] = {0};
 
 
     atsha204a_rewakeup(i2c);
 
     param2[0] = param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_READ, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_CONFIG, param2, NULL, 0);
-    msleep(CMD_MAX_TIME_READ);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    msleep(READ_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, READ_32_RSP_SIZE))
+        || (READ_32_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("read sn failed !");
         return -1;
@@ -339,7 +247,7 @@ int atsha204a_read_sn(const struct i2c_client *i2c, u8 *sn)
 int atsha204a_read_otp(const struct i2c_client *i2c, u8 *otp)
 {
     u8 param2[2];
-    u8 res[SHA204_ZONE_ACCESS_32 + 3] = {0}; /* 32字节读，加上count和CRC共35字节 */
+    u8 res[READ_32_RSP_SIZE] = {0};
     int i;
 
 
@@ -349,16 +257,17 @@ int atsha204a_read_otp(const struct i2c_client *i2c, u8 *otp)
     for (i = 0; i < 2; i++)
     {
         atsha204a_send_command(i2c, SHA204_READ, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_OTP, param2, NULL, 0);
-        msleep(CMD_MAX_TIME_READ);
-        if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+        msleep(READ_EXEC_MAX);
+        if (   (0 > atsha204a_read_response(i2c, res, READ_32_RSP_SIZE))
+            || (READ_32_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
         {
             ERROR("read otp failed !");
             return -1;
         }
-        memcpy(otp, res + 1, 32);
+        memcpy(otp, &res[SHA204_BUFFER_POS_DATA], 32);
         otp += 32;
         param2[0] = 0x08;
-        res[0] = 0;
+        res[SHA204_BUFFER_POS_COUNT] = 0;
     }
 
     atsha204a_go_sleep(i2c);
@@ -369,7 +278,7 @@ int atsha204a_read_otp(const struct i2c_client *i2c, u8 *otp)
 int atsha204a_read_config(const struct i2c_client *i2c, u8 *config)
 {
     u8 param2[2];
-    u8 res[SHA204_ZONE_ACCESS_32 + 3] = {0}; /* 32字节读，加上count和CRC共35字节 */
+    u8 res[READ_32_RSP_SIZE] = {0};
     int i;
 
 
@@ -380,16 +289,17 @@ int atsha204a_read_config(const struct i2c_client *i2c, u8 *config)
     for (i = 0; i < 2; i++)
     {
         atsha204a_send_command(i2c, SHA204_READ, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_CONFIG, param2, NULL, 0);
-        msleep(CMD_MAX_TIME_READ);
-        if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+        msleep(READ_EXEC_MAX);
+        if (   (0 > atsha204a_read_response(i2c, res, READ_32_RSP_SIZE))
+            || (READ_32_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
         {
             ERROR("read config failed !");
             return -1;
         }
-        memcpy(config, res + 1, 32);
+        memcpy(config, &res[SHA204_BUFFER_POS_DATA], 32);
         config += 32;
         param2[0] = 0x08;
-        res[0] = 0;
+        res[SHA204_BUFFER_POS_COUNT] = 0;
     }
 
     /* 读6个4字节 */
@@ -398,16 +308,17 @@ int atsha204a_read_config(const struct i2c_client *i2c, u8 *config)
     for (i = 0; i < 6; i++)
     {
         atsha204a_send_command(i2c, SHA204_READ, SHA204_ZONE_CONFIG, param2, NULL, 0);
-        msleep(CMD_MAX_TIME_READ);
-        if ((0 > atsha204a_read_response(i2c, res, 7)) || (7 != res[0]))
+        msleep(READ_EXEC_MAX);
+        if (   (0 > atsha204a_read_response(i2c, res, READ_4_RSP_SIZE))
+            || (READ_4_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
         {
             ERROR("read config failed !");
             return -1;
         }
-        memcpy(config, res + 1, 4);
+        memcpy(config, &res[SHA204_BUFFER_POS_DATA], 4);
         config += 4;
         param2[0] += 1;
-        res[0] = 0;
+        res[SHA204_BUFFER_POS_COUNT] = 0;
     }
 
     atsha204a_go_sleep(i2c);
@@ -419,7 +330,7 @@ int atsha204a_read_config(const struct i2c_client *i2c, u8 *config)
 int atsha204a_read_key(const struct i2c_client *i2c, u8 *key, u8 slot)
 {
     u8 param2[2];
-    u8 res[SHA204_ZONE_ACCESS_32 + 3] = {0}; /* 32字节读，加上count和CRC共35字节 */
+    u8 res[READ_32_RSP_SIZE] = {0};
 
 
     if (SHA204_KEY_COUNT <= slot)
@@ -430,23 +341,24 @@ int atsha204a_read_key(const struct i2c_client *i2c, u8 *key, u8 slot)
     param2[0] = 0x08 * slot;
     param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_READ, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_DATA, param2, NULL, 0);
-    msleep(CMD_MAX_TIME_READ);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    msleep(READ_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, READ_32_RSP_SIZE))
+        || (READ_32_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("read key(%u) failed !", slot);
         return -1;
     }
-    memcpy(key, res + 1, 32);
+    memcpy(key, &res[SHA204_BUFFER_POS_DATA], SHA204_KEY_SIZE);
 
     atsha204a_go_sleep(i2c);
 
-    return (int)32;
+    return 0;
 }
 /* 写数据区中的一个key(32字节) */
 int atsha204a_write_key(const struct i2c_client *i2c, const u8 *key, u8 slot)
 {
     u8 param2[2];
-    u8 res[4] = {0};
+    u8 res[WRITE_RSP_SIZE] = {0};
 
 
     if (SHA204_KEY_COUNT <= slot)
@@ -457,15 +369,16 @@ int atsha204a_write_key(const struct i2c_client *i2c, const u8 *key, u8 slot)
     param2[0] = 0x08 * slot;
     param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_WRITE, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_DATA, param2, key, SHA204_KEY_SIZE);
-    msleep(CMD_MAX_TIME_WRITE);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    msleep(WRITE_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, WRITE_RSP_SIZE))
+        || (WRITE_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("write key(%u) failed !", slot);
         return -1;
     }
-    if (0 != res[1])
+    if (0 != res[SHA204_BUFFER_POS_DATA])
     {
-        ERROR("write key(%u) failed(0x%02x) !", slot, res[1]);
+        ERROR("write key(%u) failed(0x%02x) !", slot, res[SHA204_BUFFER_POS_DATA]);
         return -1;
     }
 
@@ -477,8 +390,8 @@ int atsha204a_write_key(const struct i2c_client *i2c, const u8 *key, u8 slot)
 int atsha204a_write_encrypted_key(const struct i2c_client *i2c, const u8 *key, u8 slot, u8 *digest)
 {
     u8 param2[2];
-    u8 res[4] = {0};
-    u8 data[64] = {0};
+    u8 res[WRITE_RSP_SIZE] = {0};
+    u8 data[SHA204_KEY_SIZE + WRITE_MAC_SIZE] = {0};
 
 
     if (SHA204_KEY_COUNT <= slot)
@@ -489,18 +402,19 @@ int atsha204a_write_encrypted_key(const struct i2c_client *i2c, const u8 *key, u
 
     param2[0] = 0x08 * slot;
     param2[1] = 0;
-    memcpy(data,      key,    32);
-    memcpy(data + 32, digest, 32);
-    atsha204a_send_command(i2c, SHA204_WRITE, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_DATA, param2, data, 64);
-    msleep(CMD_MAX_TIME_WRITE);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    memcpy(data, key, SHA204_KEY_SIZE);
+    memcpy(data + SHA204_KEY_SIZE, digest, WRITE_MAC_SIZE);
+    atsha204a_send_command(i2c, SHA204_WRITE, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_DATA, param2, data, sizeof(data));
+    msleep(WRITE_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, WRITE_RSP_SIZE))
+        || (WRITE_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("write encrypted key(%u) failed !", slot);
         return -1;
     }
-    if (0 != res[1])
+    if (0 != res[SHA204_BUFFER_POS_DATA])
     {
-        ERROR("write encrypted key(%u) failed(0x%02x) !", slot, res[1]);
+        ERROR("write encrypted key(%u) failed(0x%02x) !", slot, res[SHA204_BUFFER_POS_DATA]);
         return -1;
     }
 
@@ -592,7 +506,7 @@ int atsha204a_parse_config(const struct i2c_client *i2c, u8 *str, int len)
 int atsha204a_write_config(const struct i2c_client *i2c, const u8 *config)
 {
     u8 param2[2];
-    u8 res[4] = {0};
+    u8 res[WRITE_RSP_SIZE] = {0};
     int i;
 
 
@@ -604,20 +518,21 @@ int atsha204a_write_config(const struct i2c_client *i2c, const u8 *config)
     for (i = 0; i < 17; i++)
     {
         atsha204a_send_command(i2c, SHA204_WRITE, SHA204_ZONE_CONFIG, param2, config, 4);
-        msleep(CMD_MAX_TIME_WRITE);
-        if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+        msleep(WRITE_EXEC_MAX);
+        if (   (0 > atsha204a_read_response(i2c, res, WRITE_RSP_SIZE))
+            || (WRITE_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
         {
             ERROR("write config failed !");
             return -1;
         }
-        if (0 != res[1])
+        if (0 != res[SHA204_BUFFER_POS_DATA])
         {
-            ERROR("write config failed(0x%02x) !", res[1]);
+            ERROR("write config failed(0x%02x) !", res[SHA204_BUFFER_POS_DATA]);
             return -1;
         }
         config += 4;
         param2[0]++;
-        res[0] = 0;
+        res[SHA204_BUFFER_POS_COUNT] = 0;
 
         if (8 == i)
             atsha204a_rewakeup(i2c);
@@ -636,7 +551,7 @@ int atsha204a_write_defconfig(const struct i2c_client *i2c)
 int atsha204a_write_otp(const struct i2c_client *i2c, const u8 *otp)
 {
     u8 param2[2];
-    u8 res[4] = {0};
+    u8 res[WRITE_RSP_SIZE] = {0};
     int i;
 
 
@@ -646,20 +561,21 @@ int atsha204a_write_otp(const struct i2c_client *i2c, const u8 *otp)
     for (i = 0; i < 2; i++)
     {
         atsha204a_send_command(i2c, SHA204_WRITE, SHA204_ZONE_COUNT_FLAG | SHA204_ZONE_OTP, param2, otp, 32);
-        msleep(CMD_MAX_TIME_WRITE);
-        if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+        msleep(WRITE_EXEC_MAX);
+        if (   (0 > atsha204a_read_response(i2c, res, WRITE_RSP_SIZE))
+            || (WRITE_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
         {
             ERROR("write otp failed !");
             return -1;
         }
-        if (0 != res[1])
+        if (0 != res[SHA204_BUFFER_POS_DATA])
         {
-            ERROR("write otp failed(0x%02x) !",res[1]);
+            ERROR("write otp failed(0x%02x) !",res[SHA204_BUFFER_POS_DATA]);
             return -1;
         }
         otp += 32;
         param2[0] = 0x08;
-        res[0] = 0;
+        res[SHA204_BUFFER_POS_COUNT] = 0;
     }
 
     atsha204a_go_sleep(i2c);
@@ -671,22 +587,23 @@ int atsha204a_write_otp(const struct i2c_client *i2c, const u8 *otp)
 int atsha204a_lock_config(const struct i2c_client *i2c)
 {
     u8 param2[2];
-    u8 res[4] = {0};
+    u8 res[LOCK_RSP_SIZE] = {0};
 
 
     atsha204a_rewakeup(i2c);
 
     param2[0] = param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_LOCK, LOCK_ZONE_NO_CRC, param2, NULL, 0);
-    msleep(CMD_MAX_TIME_LOCK);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    msleep(LOCK_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, LOCK_RSP_SIZE))
+        || (LOCK_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("lock config failed !");
         return -1;
     }
-    if (0 != res[1])
+    if (0 != res[SHA204_BUFFER_POS_DATA])
     {
-        ERROR("lock config failed(0x%02x) !", res[1]);
+        ERROR("lock config failed(0x%02x) !", res[SHA204_BUFFER_POS_DATA]);
         return -1;
     }
 
@@ -697,22 +614,23 @@ int atsha204a_lock_config(const struct i2c_client *i2c)
 int atsha204a_lock_value(const struct i2c_client *i2c)
 {
     u8 param2[2];
-    u8 res[4] = {0};
+    u8 res[LOCK_RSP_SIZE] = {0};
 
 
     atsha204a_rewakeup(i2c);
 
     param2[0] = param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_LOCK, LOCK_ZONE_NO_CRC | LOCK_ZONE_NO_CONFIG, param2, NULL, 0);
-    msleep(CMD_MAX_TIME_LOCK);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    msleep(LOCK_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, LOCK_RSP_SIZE))
+        || (LOCK_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("lock value failed !");
         return -1;
     }
-    if (0 != res[1])
+    if (0 != res[SHA204_BUFFER_POS_DATA])
     {
-        ERROR("lock value failed(0x%02x) !", res[1]);
+        ERROR("lock value failed(0x%02x) !", res[SHA204_BUFFER_POS_DATA]);
         return -1;
     }
 
@@ -721,24 +639,45 @@ int atsha204a_lock_value(const struct i2c_client *i2c)
     return 0;
 }
 
-/* 输入20字节，输出32字节随机数 */
-int atsha204a_nonce(const struct i2c_client *i2c, u8 mode, const u8 *in, u8 *out)
+/* 输入20/32字节，输出32字节随机数 */
+int atsha204a_nonce(const struct i2c_client *i2c, u8 mode, const u8 *num_in, u8 *rand_out)
 {
     u8 param2[2];
-    u8 res[32 + 3] = {0}; /* 32字节读，加上count和CRC共35字节 */
+    u8 res[NONCE_RSP_SIZE_LONG] = {0};
 
 
     atsha204a_rewakeup(i2c);
 
-    param2[0] = param2[1] = 0;
-    atsha204a_send_command(i2c, SHA204_NONCE, mode, param2, in, NONCE_NUMIN_SIZE);
-    msleep(CMD_MAX_TIME_NONCE);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    if ((NONCE_MODE_SEED_UPDATE == mode) || (NONCE_MODE_NO_SEED_UPDATE == mode))
     {
-        ERROR("execute nonce cmd failed !");
-        return -1;
+        param2[0] = param2[1] = 0;
+        atsha204a_send_command(i2c, SHA204_NONCE, mode, param2, num_in, NONCE_NUMIN_SIZE);
+        msleep(NONCE_EXEC_MAX);
+        if (   (0 > atsha204a_read_response(i2c, res, NONCE_RSP_SIZE_LONG))
+            || (NONCE_RSP_SIZE_LONG != res[SHA204_BUFFER_POS_COUNT]))
+        {
+            ERROR("execute nonce cmd failed !");
+            return -1;
+        }
+        memcpy(rand_out, &res[SHA204_BUFFER_POS_DATA], NONCE_RANDOUT_SIZE);
     }
-    memcpy(out, res + 1, 32);
+    else
+    {
+        param2[0] = param2[1] = 0;
+        atsha204a_send_command(i2c, SHA204_NONCE, mode, param2, num_in, NONCE_NUMIN_SIZE_PASSTHROUGH);
+        msleep(NONCE_EXEC_MAX);
+        if (   (0 > atsha204a_read_response(i2c, res, NONCE_RSP_SIZE_SHORT))
+            || (NONCE_RSP_SIZE_SHORT != res[SHA204_BUFFER_POS_COUNT]))
+        {
+            ERROR("execute passthrough nonce cmd failed !");
+            return -1;
+        }
+        if (0 != res[SHA204_BUFFER_POS_DATA])
+        {
+            ERROR("execute passthrough nonce cmd failed(0x%02x) !", res[SHA204_BUFFER_POS_DATA]);
+            return -1;
+        }
+    }
 
     /* 这里必须idle，保留TempKey和RNG Seed寄存器的值，让接下来的mac等指令正确执行 */
     atsha204a_set_idle(i2c);
@@ -750,7 +689,7 @@ int atsha204a_nonce(const struct i2c_client *i2c, u8 mode, const u8 *in, u8 *out
 int atsha204a_mac(const struct i2c_client *i2c, u8 mode, u8 slot, const u8 *challenge, u8 len, u8 *mac)
 {
     u8 param2[2];
-    u8 res[32 + 3] = {0}; /* 32字节读，加上count和CRC共35字节 */
+    u8 res[MAC_RSP_SIZE] = {0};
 
 
     if (SHA204_KEY_COUNT <= slot)
@@ -764,13 +703,14 @@ int atsha204a_mac(const struct i2c_client *i2c, u8 mode, u8 slot, const u8 *chal
     param2[0] = slot;
     param2[1] = 0;
     atsha204a_send_command(i2c, SHA204_MAC, mode, param2, challenge, len);
-    msleep(CMD_MAX_TIME_MAC);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    msleep(MAC_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, MAC_RSP_SIZE))
+        || (MAC_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("execute mac cmd failed !");
         return -1;
     }
-    memcpy(mac, res + 1, 32);
+    memcpy(mac, &res[SHA204_BUFFER_POS_DATA], MAC_DIGEST_SIZE);
 
     atsha204a_go_sleep(i2c);
 
@@ -781,7 +721,7 @@ int atsha204a_mac(const struct i2c_client *i2c, u8 mode, u8 slot, const u8 *chal
 int atsha204a_gendig(const struct i2c_client *i2c, u8 zone, u16 slot, const u8 *data, u8 len)
 {
     u8 param2[2];
-    u8 res[4] = {0};
+    u8 res[GENDIG_RSP_SIZE] = {0};
 
 
     if ((SHA204_ZONE_CONFIG != zone) && (SHA204_ZONE_OTP != zone) && (SHA204_ZONE_DATA != zone))
@@ -795,15 +735,16 @@ int atsha204a_gendig(const struct i2c_client *i2c, u8 zone, u16 slot, const u8 *
     param2[0] =  slot & 0xff;
     param2[1] = (slot & 0xff00) >> 8;
     atsha204a_send_command(i2c, SHA204_GENDIG, zone, param2, data, len);
-    msleep(CMD_MAX_TIME_GENDIG);
-    if ((0 > atsha204a_read_response(i2c, res, sizeof(res))) || (sizeof(res) != res[0]))
+    msleep(GENDIG_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, GENDIG_RSP_SIZE))
+        || (GENDIG_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
     {
         ERROR("execute gendig cmd failed !");
         return -1;
     }
-    if (0 != res[1])
+    if (0 != res[SHA204_BUFFER_POS_DATA])
     {
-        ERROR("execute gendig cmd failed(0x%02x) !", res[1]);
+        ERROR("execute gendig cmd failed(0x%02x) !", res[SHA204_BUFFER_POS_DATA]);
         return -1;
     }
 
@@ -811,4 +752,55 @@ int atsha204a_gendig(const struct i2c_client *i2c, u8 zone, u16 slot, const u8 *
     atsha204a_set_idle(i2c);
 
     return 0;
+}
+
+
+
+/* 验证芯片内的秘钥是否烧录成功,  -1:错误  0:秘钥验证一致  1:秘钥验证不一致 */
+int atsha204a_verify_key(const struct i2c_client *i2c, const u8 *key, u8 slot)
+{
+    u8 num_in[NONCE_NUMIN_SIZE];
+    u8 rand_out[NONCE_RANDOUT_SIZE];
+    struct sha204h_nonce_in_out nonce_param;
+    struct sha204h_temp_key tempkey;
+    u8 mac_hw[MAC_DIGEST_SIZE];
+    u8 mac_sw[MAC_DIGEST_SIZE];
+    struct sha204h_mac_in_out mac_param;
+
+
+    get_random_bytes(num_in, sizeof(num_in));
+
+    // 1.加密芯片运行 NONCE 命令, 在芯片内部生成 tempkey, 并返回32字节随机数
+    if (0 != atsha204a_nonce(i2c, NONCE_MODE_NO_SEED_UPDATE, num_in, rand_out))
+        return -1;
+
+    // 2.软件模拟运行 NONCE 命令, 生成 tempkey
+    nonce_param.mode = NONCE_MODE_NO_SEED_UPDATE;
+    nonce_param.num_in = num_in;
+    nonce_param.rand_out = rand_out;
+    nonce_param.temp_key = &tempkey;
+    if (SHA204_SUCCESS != sha204h_nonce(&nonce_param))
+        return -1;
+
+    // 3.加密芯片运行 MAC 命令
+    if (0 != atsha204a_mac(i2c, MAC_MODE_BLOCK2_TEMPKEY, slot, NULL, 0, mac_hw))
+        return -1;
+
+    // 4.软件模拟运行 MAC 命令
+    mac_param.mode = MAC_MODE_BLOCK2_TEMPKEY;
+    mac_param.key_id = slot;
+    mac_param.challenge = NULL;
+    mac_param.key = key;
+    mac_param.otp = NULL;
+    mac_param.sn = NULL;
+    mac_param.response = mac_sw;
+    mac_param.temp_key = &tempkey;
+    if (SHA204_SUCCESS != sha204h_mac(&mac_param))
+        return -1;
+
+    // 5.加密芯片和软件生成的摘要进行对比，如果相等，则验证成功
+    if (0 == memcmp(mac_hw, mac_sw, MAC_DIGEST_SIZE))
+        return 0;
+    else
+        return 1;
 }
