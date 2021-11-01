@@ -11,6 +11,7 @@
 
 extern int hex_dump_str(char *str, int str_len, const u8 *buf, int buf_len, u8 col);
 extern int atsha204a_read_sn(const struct i2c_client *i2c, u8 *sn);
+extern int atsha204a_read_devrev(const struct i2c_client *i2c, u8 *rev);
 extern int atsha204a_read_otp(const struct i2c_client *i2c, u8 *otp);
 extern int atsha204a_read_config(const struct i2c_client *i2c, u8 *config);
 extern int atsha204a_parse_config(const struct i2c_client *i2c, u8 *str, int len);

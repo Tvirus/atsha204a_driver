@@ -8,7 +8,7 @@
 
 
 
-#define VERSION "2.0"
+#define VERSION "3.0"
 
 
 
@@ -68,6 +68,7 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
 {
     atsha204a_sysdata_t *sha204_sysdata = filp->private_data;
     atsha204a_cmd_sn_t          sn;
+    atsha204a_cmd_devrev_t      devrev;
     atsha204a_cmd_otp_t         otp;
     atsha204a_cmd_nonce_t       nonce;
     atsha204a_cmd_mac_t         mac;
@@ -81,15 +82,23 @@ static long atsha204a_ioctl(struct file* filp, unsigned int cmd, unsigned long d
     {
         case ATSHA204A_CMD_READ_SN:
         {
-            if (0 > atsha204a_read_sn(sha204_sysdata->client, (u8 *)(&sn)))
+            if (0 > atsha204a_read_sn(sha204_sysdata->client, sn.sn))
                 return -1;
             if (0 != copy_to_user((u8 *)data, &sn, sizeof(sn)))
                 return -1;
             return 0;
         }
+        case ATSHA204A_CMD_READ_DEVREV:
+        {
+            if (0 > atsha204a_read_devrev(sha204_sysdata->client, devrev.rev))
+                return -1;
+            if (0 != copy_to_user((u8 *)data, &devrev, sizeof(devrev)))
+                return -1;
+            return 0;
+        }
         case ATSHA204A_CMD_READ_OTP:
         {
-            if (0 > atsha204a_read_otp(sha204_sysdata->client, (u8 *)(&otp)))
+            if (0 > atsha204a_read_otp(sha204_sysdata->client, otp.otp))
                 return -1;
             if (0 != copy_to_user((u8 *)data, &otp, sizeof(otp)))
                 return -1;

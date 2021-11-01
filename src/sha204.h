@@ -218,6 +218,7 @@ extern "C" {
 #define SHA204_WRITABLE_CONFIG_SIZE     (68)                   //!< 可写的config区大小
 #define SHA204_OTP_SIZE                 (64)                   //!< size of OTP zone
 #define SHA204_SN_SIZE                  (9)                    //!< SN长度
+#define SHA204_DEVREV_SIZE              (4)                    //!< 芯片版本号长度
 #define SHA204_DATA_SIZE                (SHA204_KEY_COUNT * SHA204_KEY_SIZE) //!< size of data zone
 /** @} */
 

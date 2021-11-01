@@ -12,6 +12,7 @@
 #define ATSHA204A_CMD_READ_OTP             (0x11)       //读otp
 #define ATSHA204A_CMD_NONCE                (0x12)       //NONCE命令
 #define ATSHA204A_CMD_MAC                  (0x13)       //MAC命令
+#define ATSHA204A_CMD_READ_DEVREV          (0x14)       //读芯片版本号
 
 #define ATSHA204A_CMD_BURN_CONFIG          (0x30)       //写入并锁定config区
 #define ATSHA204A_CMD_BURN_DEFCONFIG       (0x31)       //写入默认值并锁定config区
@@ -31,6 +32,11 @@
 typedef struct {
     uint8_t sn[SHA204_SN_SIZE];
 }atsha204a_cmd_sn_t;
+
+/* 读DevRev */
+typedef struct {
+    uint8_t rev[SHA204_DEVREV_SIZE];
+}atsha204a_cmd_devrev_t;
 
 /* 读写otp */
 typedef struct {

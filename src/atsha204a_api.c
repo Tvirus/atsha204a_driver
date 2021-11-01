@@ -244,6 +244,30 @@ int atsha204a_read_sn(const struct i2c_client *i2c, u8 *sn)
     return 0;
 }
 
+int atsha204a_read_devrev(const struct i2c_client *i2c, u8 *rev)
+{
+    u8 param2[2];
+    u8 res[DEVREV_RSP_SIZE] = {0};
+
+
+    atsha204a_rewakeup(i2c);
+
+    param2[0] = param2[1] = 0;
+    atsha204a_send_command(i2c, SHA204_DEVREV, 0, param2, NULL, 0);
+    msleep(DEVREV_EXEC_MAX);
+    if (   (0 > atsha204a_read_response(i2c, res, DEVREV_RSP_SIZE))
+        || (DEVREV_RSP_SIZE != res[SHA204_BUFFER_POS_COUNT]))
+    {
+        ERROR("read device revision number failed !");
+        return -1;
+    }
+    memcpy(rev, &res[SHA204_BUFFER_POS_DATA], SHA204_DEVREV_SIZE);
+
+    atsha204a_go_sleep(i2c);
+
+    return 0;
+}
+
 int atsha204a_read_otp(const struct i2c_client *i2c, u8 *otp)
 {
     u8 param2[2];
