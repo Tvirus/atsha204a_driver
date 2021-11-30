@@ -781,7 +781,7 @@ int atsha204a_gendig(const struct i2c_client *i2c, u8 zone, u16 slot, const u8 *
 
 
 /* 验证芯片内的秘钥是否烧录成功,  -1:错误  0:秘钥验证一致  1:秘钥验证不一致 */
-int atsha204a_verify_key(const struct i2c_client *i2c, const u8 *key, u8 slot)
+int atsha204a_verify_key(const struct i2c_client *i2c, u8 *key, u8 slot)
 {
     u8 num_in[NONCE_NUMIN_SIZE];
     u8 rand_out[NONCE_RANDOUT_SIZE];

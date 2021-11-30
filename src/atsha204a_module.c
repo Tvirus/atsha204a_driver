@@ -1,14 +1,15 @@
 #include <linux/module.h>
 #include <linux/i2c.h>
-#include <linux/cdev.h>
 #include <linux/slab.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
 #include <linux/uaccess.h>
 #include "atsha204a_ioctl.h"
 #include "atsha204a_api.h"
 
 
 
-#define VERSION "3.0"
+#define VERSION "3.1"
 
 
 
@@ -382,12 +383,12 @@ static int atsha204a_probe(struct i2c_client *client, const struct i2c_device_id
         ERROR("alloc chrdev region failed !");
         goto ERR_1;
     }
-    sha204_sysdata->fops.owner   = THIS_MODULE,
-    sha204_sysdata->fops.open    = atsha204a_open,
-    sha204_sysdata->fops.release = atsha204a_release,
-    sha204_sysdata->fops.read    = atsha204a_read,
-    sha204_sysdata->fops.write   = atsha204a_write,
-    sha204_sysdata->fops.unlocked_ioctl = atsha204a_ioctl,
+    sha204_sysdata->fops.owner   = THIS_MODULE;
+    sha204_sysdata->fops.open    = atsha204a_open;
+    sha204_sysdata->fops.release = atsha204a_release;
+    sha204_sysdata->fops.read    = atsha204a_read;
+    sha204_sysdata->fops.write   = atsha204a_write;
+    sha204_sysdata->fops.unlocked_ioctl = atsha204a_ioctl;
     cdev_init(&sha204_sysdata->cdev, &sha204_sysdata->fops);
     ret = cdev_add(&sha204_sysdata->cdev, sha204_sysdata->dev_num, 1);
     if (ret)

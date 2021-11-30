@@ -1,5 +1,5 @@
 
-config ATSHA204A
+config CRYPTO_DEV_ATSHA204A
 	tristate "Support for Atmel atsha204a authentication devices."
 	depends on I2C
 	help

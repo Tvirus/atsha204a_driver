@@ -26,7 +26,7 @@ extern int atsha204a_lock_value(const struct i2c_client *i2c);
 extern int atsha204a_nonce(const struct i2c_client *i2c, u8 mode, const u8 *num_in, u8 *rand_out);
 extern int atsha204a_mac(const struct i2c_client *i2c, u8 mode, u8 slot, const u8 *challenge, u8 len, u8 *mac);
 extern int atsha204a_gendig(const struct i2c_client *i2c, u8 zone, u16 slot, const u8 *data, u8 len);
-extern int atsha204a_verify_key(const struct i2c_client *i2c, const u8 *key, u8 slot);
+extern int atsha204a_verify_key(const struct i2c_client *i2c, u8 *key, u8 slot);
 
 
 
