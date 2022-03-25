@@ -12,7 +12,7 @@
 #define ATSHA204A_CMD_READ_OTP             (0x11)       //读otp
 #define ATSHA204A_CMD_NONCE                (0x12)       //NONCE命令
 #define ATSHA204A_CMD_MAC                  (0x13)       //MAC命令
-#define ATSHA204A_CMD_READ_DEVREV          (0x14)       //读芯片版本号
+#define ATSHA204A_CMD_READ_DEVREV          (0x14)       //读芯片版本号RevNum
 
 #define ATSHA204A_CMD_BURN_CONFIG          (0x30)       //写入并锁定config区
 #define ATSHA204A_CMD_BURN_DEFCONFIG       (0x31)       //写入默认值并锁定config区
@@ -22,7 +22,7 @@
 #define ATSHA204A_CMD_GENDIG               (0x35)       //生成摘要
 #define ATSHA204A_CMD_WRITE_ENCRYPTED_KEY  (0x36)       //用加密写的方式写一个密钥
 
-#define ATSHA204A_CMD_VERIFY_KEY           (0x50)       //验证秘钥是否烧录成功
+#define ATSHA204A_CMD_VERIFY_KEY           (0x50)       //验证秘钥是否烧录成功，只在生产测试阶段使用!
 
 
 
@@ -33,7 +33,7 @@ typedef struct {
     uint8_t sn[SHA204_SN_SIZE];
 }atsha204a_cmd_sn_t;
 
-/* 读DevRev */
+/* 读芯片版本号DevRev */
 typedef struct {
     uint8_t rev[SHA204_DEVREV_SIZE];
 }atsha204a_cmd_devrev_t;
