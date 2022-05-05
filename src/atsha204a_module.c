@@ -9,7 +9,7 @@
 
 
 
-#define VERSION "3.1"
+#define VERSION "3.2"
 
 
 
@@ -412,7 +412,6 @@ static int atsha204a_probe(struct i2c_client *client, const struct i2c_device_id
         ret = PTR_ERR(sha204_sysdata->class_device);
         goto ERR_4;
     }
-    dev_set_drvdata(sha204_sysdata->class_device, sha204_sysdata);
 
     /* 增加配置接口 */
     ret = atsha204a_add_sysfs_interfaces(sha204_sysdata->class_device, atsha204a_attrs, atsha204a_attrs_size);
@@ -427,7 +426,6 @@ static int atsha204a_probe(struct i2c_client *client, const struct i2c_device_id
 
 
 ERR_5:
-    dev_set_drvdata(sha204_sysdata->class_device, NULL);
     device_destroy(sha204_sysdata->class, sha204_sysdata->dev_num);
 ERR_4:
     class_destroy(sha204_sysdata->class);
